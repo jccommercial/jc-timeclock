@@ -142,26 +142,38 @@ export default function LogsPage() {
     if (!input) return;
     const dt = new Date(input.replace(' ', 'T'));
     if (isNaN(dt)) { alert('Could not read that date/time.'); return; }
-    await fetch(`/api/admin/shifts/${shift.id}`, {
+    const res = await fetch(`/api/admin/shifts/${shift.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clock_out: dt.toISOString(), flagged: true, flag_reason: 'Clock-out set manually by admin' }),
     });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      alert(`Update failed (${res.status}): ${j.error || 'unknown error'}`);
+    }
     load();
   }
 
   async function deleteShift(id) {
     if (!confirm('Delete this shift record? This cannot be undone.')) return;
-    await fetch(`/api/admin/shifts/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/admin/shifts/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      alert(`Delete failed (${res.status}): ${j.error || 'unknown error'}`);
+    }
     load();
   }
 
   async function clearFlag(id) {
-    await fetch(`/api/admin/shifts/${id}`, {
+    const res = await fetch(`/api/admin/shifts/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ flagged: false, flag_reason: null }),
     });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      alert(`Update failed (${res.status}): ${j.error || 'unknown error'}`);
+    }
     load();
   }
 
