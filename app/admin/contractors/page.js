@@ -53,6 +53,18 @@ export default function ContractorsPage() {
     load();
   }
 
+  async function editPhone(c) {
+    const v = prompt(`New mobile number for ${c.name}:`, c.phone || '');
+    if (v === null) return;
+    const res = await fetch(`/api/admin/contractors/${c.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: v }),
+    });
+    if (!res.ok) alert((await res.json()).error);
+    load();
+  }
+
   async function remove(c) {
     if (!confirm(`Delete ${c.name}? If they have shift history you'll be asked to deactivate instead.`)) return;
     const res = await fetch(`/api/admin/contractors/${c.id}`, { method: 'DELETE' });
@@ -64,8 +76,8 @@ export default function ContractorsPage() {
     <>
       <div className="page-title">Contractors</div>
       <div className="page-sub">
-        Everyone on this list (active) appears in the name dropdown at clock-in.
-        Give each person their PIN privately — it&apos;s how the system knows it&apos;s really them.
+        Cleaners sign in at the site with their <strong>mobile number + PIN</strong>, so both are
+        required and the mobile must be unique. Text each person their PIN privately.
       </div>
 
       <div className="card">
@@ -77,12 +89,12 @@ export default function ContractorsPage() {
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Maria Santos" />
             </div>
             <div className="field">
-              <label>4-digit PIN *</label>
-              <input inputMode="numeric" maxLength={4} value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} placeholder="e.g. 4827" />
+              <label>Mobile number * (their sign-in)</label>
+              <input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="04xx xxx xxx" />
             </div>
             <div className="field">
-              <label>Phone (optional)</label>
-              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="04xx xxx xxx" />
+              <label>4-digit PIN *</label>
+              <input inputMode="numeric" maxLength={4} value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} placeholder="e.g. 4827" />
             </div>
           </div>
           {err && <div className="error-text">{err}</div>}
@@ -99,13 +111,16 @@ export default function ContractorsPage() {
         </h3>
         <div className="table-scroll">
           <table className="data">
-            <thead><tr><th>Name</th><th>PIN</th><th>Phone</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Name</th><th>Mobile (sign-in)</th><th>PIN</th><th>Status</th><th></th></tr></thead>
             <tbody>
               {contractors.map((c) => (
                 <tr key={c.id}>
                   <td><strong>{c.name}</strong></td>
+                  <td>
+                    {c.phone || <span className="badge badge-red">Missing — can&apos;t clock in</span>}{' '}
+                    <button className="btn-link" onClick={() => editPhone(c)}>edit</button>
+                  </td>
                   <td>{showPins ? c.pin : '••••'} <button className="btn-link" onClick={() => resetPin(c)}>reset</button></td>
-                  <td>{c.phone || '—'}</td>
                   <td>{c.active ? <span className="badge badge-green">Active</span> : <span className="badge badge-grey">Inactive</span>}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button className="btn-link" onClick={() => toggleActive(c)}>{c.active ? 'Deactivate' : 'Reactivate'}</button>{' '}

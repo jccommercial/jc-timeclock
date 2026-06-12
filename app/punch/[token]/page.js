@@ -4,16 +4,18 @@ import { useEffect, useState, useCallback } from 'react';
 import { fmtTime, fmtHours, hoursBetween } from '@/lib/util';
 
 // Cleaner-facing screen, opened by scanning the site QR code.
-// Flow: pick name -> enter PIN -> Clock In, or (note + issue?) -> Clock Out.
+// Flow: enter mobile + PIN -> Clock In, or (note + issue?) -> Clock Out.
+// The phone number is remembered on the device, so repeat visits are
+// just PIN -> tap.
 
 export default function PunchPage({ params }) {
   const token = params.token;
 
   const [phase, setPhase] = useState('loading'); // loading | invalid | identify | punch | done
   const [site, setSite] = useState(null);
-  const [contractors, setContractors] = useState([]);
-  const [contractorId, setContractorId] = useState('');
+  const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
+  const [cleanerName, setCleanerName] = useState('');
   const [openShift, setOpenShift] = useState(null);
   const [note, setNote] = useState('');
   const [hasIssue, setHasIssue] = useState(false);
@@ -22,14 +24,13 @@ export default function PunchPage({ params }) {
   const [result, setResult] = useState(null);
 
   useEffect(() => {
-    fetch(`/api/site/${token}`)
+    fetch(`/api/site/${token}`, { cache: 'no-store' })
       .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
       .then(({ ok, j }) => {
         if (!ok) { setPhase('invalid'); setError(j.error || 'Invalid QR code'); return; }
         setSite(j.site);
-        setContractors(j.contractors);
-        const last = typeof window !== 'undefined' ? localStorage.getItem('jc_last_contractor') : null;
-        if (last && j.contractors.some((c) => c.id === last)) setContractorId(last);
+        const saved = typeof window !== 'undefined' ? localStorage.getItem('jc_phone') : null;
+        if (saved) setPhone(saved);
         setPhase('identify');
       })
       .catch(() => { setPhase('invalid'); setError('Could not load. Check your signal and rescan the code.'); });
@@ -58,22 +59,24 @@ export default function PunchPage({ params }) {
     const res = await fetch('/api/punch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token, contractor_id: contractorId, pin, action, ...extra }),
+      body: JSON.stringify({ token, phone, pin, action, ...extra }),
     });
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || 'Something went wrong');
     return j;
   }
 
-  async function handleContinue(e) {
+  async function handleSignIn(e) {
     e.preventDefault();
     setError('');
-    if (!contractorId) { setError('Select your name first.'); return; }
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 9) { setError('Enter your mobile number first.'); return; }
     if (!/^\d{4}$/.test(pin)) { setError('Enter your 4-digit PIN.'); return; }
     setBusy(true);
     try {
       const j = await callPunch('status');
-      localStorage.setItem('jc_last_contractor', contractorId);
+      localStorage.setItem('jc_phone', phone);
+      setCleanerName(j.contractor?.name || '');
       setOpenShift(j.open_shift);
       setPhase('punch');
     } catch (err) {
@@ -98,8 +101,6 @@ export default function PunchPage({ params }) {
     }
   }
 
-  const selectedName = contractors.find((c) => c.id === contractorId)?.name || '';
-
   return (
     <div className="punch-wrap">
       <div className="punch-brand">JC Commercial</div>
@@ -113,14 +114,17 @@ export default function PunchPage({ params }) {
         )}
 
         {phase === 'identify' && (
-          <form onSubmit={handleContinue}>
-            <label htmlFor="who">Your name</label>
-            <select id="who" value={contractorId} onChange={(e) => setContractorId(e.target.value)}>
-              <option value="">Select your name…</option>
-              {contractors.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+          <form onSubmit={handleSignIn}>
+            <label htmlFor="phone">Your mobile number</label>
+            <input
+              id="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="04xx xxx xxx"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
 
             <label htmlFor="pin">Your PIN</label>
             <input
@@ -137,7 +141,7 @@ export default function PunchPage({ params }) {
 
             {error && <div className="punch-error">{error}</div>}
             <button type="submit" className="btn-big btn-neutral" disabled={busy}>
-              {busy ? 'Checking…' : 'Continue'}
+              {busy ? 'Checking…' : 'Sign in'}
             </button>
           </form>
         )}
@@ -145,7 +149,7 @@ export default function PunchPage({ params }) {
         {phase === 'punch' && !openShift && (
           <div>
             <p style={{ textAlign: 'center', fontSize: 17 }}>
-              G&apos;day <strong>{selectedName}</strong>
+              G&apos;day <strong>{cleanerName}</strong>
             </p>
             {error && <div className="punch-error">{error}</div>}
             <button className="btn-big btn-in" disabled={busy} onClick={() => handlePunch('in')}>
@@ -158,7 +162,7 @@ export default function PunchPage({ params }) {
         {phase === 'punch' && openShift && (
           <div>
             <p style={{ textAlign: 'center', fontSize: 16 }}>
-              <strong>{selectedName}</strong> — on the clock at{' '}
+              <strong>{cleanerName}</strong> — on the clock at{' '}
               <strong>{openShift.site_name}</strong> since {fmtTime(openShift.clock_in)}{' '}
               ({fmtHours(hoursBetween(openShift.clock_in))})
             </p>

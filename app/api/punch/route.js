@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/supabase';
-import { haversineMetres } from '@/lib/util';
+import { haversineMetres, normalizePhone } from '@/lib/util';
+
+export const dynamic = 'force-dynamic';
 
 const GPS_FLAG_DISTANCE_M = 500; // flag punches further than this from the site
 const LONG_SHIFT_HOURS = 14;     // flag shifts longer than this at clock-out
 
 // Single endpoint for the cleaner flow.
 // action: 'status' | 'in' | 'out'
-// Every action requires a valid site qr_token + contractor_id + PIN.
+// Every action requires a valid site qr_token + the cleaner's own
+// mobile number + PIN.
 export async function POST(req) {
   let body;
   try {
@@ -16,9 +19,14 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Bad request' }, { status: 400 });
   }
 
-  const { token, contractor_id, pin, action, lat, lng, accuracy, note, has_issue } = body;
-  if (!token || !contractor_id || !pin || !action) {
+  const { token, phone, pin, action, lat, lng, accuracy, note, has_issue } = body;
+  if (!token || !phone || !pin || !action) {
     return NextResponse.json({ error: 'Missing details' }, { status: 400 });
+  }
+
+  const normPhone = normalizePhone(phone);
+  if (!normPhone) {
+    return NextResponse.json({ error: 'That doesn’t look like a valid mobile number.' }, { status: 400 });
   }
 
   // Validate site
@@ -30,14 +38,21 @@ export async function POST(req) {
     .maybeSingle();
   if (!site) return NextResponse.json({ error: 'Invalid or inactive QR code' }, { status: 404 });
 
-  // Validate contractor + PIN
-  const { data: contractor } = await db()
+  // Find the contractor by mobile number (matched on normalised digits,
+  // so 04xx, +61 4xx and spaced formats all work), then check the PIN.
+  const { data: allActive } = await db()
     .from('contractors')
-    .select('id, name, pin')
-    .eq('id', contractor_id)
-    .eq('active', true)
-    .maybeSingle();
-  if (!contractor || String(contractor.pin) !== String(pin)) {
+    .select('id, name, pin, phone')
+    .eq('active', true);
+
+  const contractor = (allActive || []).find((c) => normalizePhone(c.phone) === normPhone);
+  if (!contractor) {
+    return NextResponse.json(
+      { error: 'Mobile number not recognised. Check the number, or contact Jordan to get set up.' },
+      { status: 401 }
+    );
+  }
+  if (String(contractor.pin) !== String(pin)) {
     return NextResponse.json({ error: 'Wrong PIN. Check with Jordan if you’ve forgotten it.' }, { status: 401 });
   }
 
@@ -45,7 +60,7 @@ export async function POST(req) {
   const { data: openShift } = await db()
     .from('shifts')
     .select('id, site_id, clock_in, sites(name)')
-    .eq('contractor_id', contractor_id)
+    .eq('contractor_id', contractor.id)
     .is('clock_out', null)
     .order('clock_in', { ascending: false })
     .limit(1)
@@ -53,6 +68,7 @@ export async function POST(req) {
 
   if (action === 'status') {
     return NextResponse.json({
+      contractor: { name: contractor.name },
       open_shift: openShift
         ? {
             id: openShift.id,
@@ -82,7 +98,7 @@ export async function POST(req) {
     const { data: shift, error } = await db()
       .from('shifts')
       .insert({
-        contractor_id,
+        contractor_id: contractor.id,
         site_id: site.id,
         in_lat: lat ?? null,
         in_lng: lng ?? null,

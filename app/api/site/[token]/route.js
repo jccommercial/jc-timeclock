@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/supabase';
 
-// Public endpoint hit after a QR scan. Returns the site name and the
-// list of active contractor names (no PINs, no other data).
+export const dynamic = 'force-dynamic';
+
+// Public endpoint hit after a QR scan. Returns the site name only —
+// cleaners identify themselves with their own phone number + PIN,
+// so no contractor list is ever exposed publicly.
 export async function GET(req, { params }) {
   const { token } = params;
 
@@ -16,11 +19,5 @@ export async function GET(req, { params }) {
   if (error) return NextResponse.json({ error: 'Server error' }, { status: 500 });
   if (!site) return NextResponse.json({ error: 'Invalid or inactive QR code' }, { status: 404 });
 
-  const { data: contractors } = await db()
-    .from('contractors')
-    .select('id, name')
-    .eq('active', true)
-    .order('name');
-
-  return NextResponse.json({ site: { name: site.name }, contractors: contractors || [] });
+  return NextResponse.json({ site: { name: site.name } });
 }

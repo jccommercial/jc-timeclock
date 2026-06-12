@@ -1,10 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -19,8 +17,9 @@ export default function LoginPage() {
       body: JSON.stringify({ password }),
     });
     if (res.ok) {
-      router.push('/admin');
-      router.refresh();
+      // Full page load so the new login cookie is picked up immediately
+      // (client-side navigation can serve a stale cached redirect).
+      window.location.href = '/admin';
     } else {
       setError('Wrong password');
       setBusy(false);

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 
 const NAV = [
   { href: '/admin', label: 'Dashboard' },
@@ -12,13 +12,13 @@ const NAV = [
 
 export default function AdminLayout({ children }) {
   const pathname = usePathname();
-  const router = useRouter();
 
   if (pathname === '/admin/login') return children;
 
   async function logout() {
     await fetch('/api/admin/logout', { method: 'POST' });
-    router.push('/admin/login');
+    // Full page load so the cleared cookie takes effect immediately.
+    window.location.href = '/admin/login';
   }
 
   return (
