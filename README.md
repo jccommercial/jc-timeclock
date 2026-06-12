@@ -1,4 +1,4 @@
-# JC Commercial Time Clock
+# JC Commercial Time Clock.
 
 QR-based clock-in/clock-out for cleaning sites. Cleaners scan a printed QR code on arrival, pick their name, enter their PIN, and tap Clock In — no app install. You get a live dashboard, weekly/monthly reports with expected-vs-actual hours, an issue log, and CSV export.
 
